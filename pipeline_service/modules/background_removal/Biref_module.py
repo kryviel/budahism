@@ -71,31 +71,56 @@ class BiRefNetBackgroundRemovalService(BackgroundRemovalService):
         """
         Remove the background from the image.
         """
-        #Resize input 
+        padding = 0.2  # 20% padding
+
+        # Resize input
         image = image.resize(self.settings.output_image_size, Image.Resampling.LANCZOS)
-        
+
         output = self.model(image)
         output_np = np.array(output)
+
         alpha = output_np[:, :, 3]
         bbox = np.argwhere(alpha > 0.8 * 255)
+
         if bbox.size == 0:
             output = output.convert("RGB")
             output = output.resize(self.settings.output_image_size, Image.Resampling.LANCZOS)
             return output
 
-        bbox = np.min(bbox[:, 1]), np.min(bbox[:, 0]), np.max(bbox[:, 1]), np.max(bbox[:, 0])
-        center = (bbox[0] + bbox[2]) / 2, (bbox[1] + bbox[3]) / 2
-        size = max(bbox[2] - bbox[0], bbox[3] - bbox[1])
-        size = int(size * 1)
-        bbox = center[0] - size // 2, center[1] - size // 2, center[0] + size // 2, center[1] + size // 2
-        output = output.crop(bbox)  # type: ignore
-        output = np.array(output).astype(np.float32) / 255
+        # bbox: (x_min, y_min, x_max, y_max)
+        x_min = np.min(bbox[:, 1])
+        y_min = np.min(bbox[:, 0])
+        x_max = np.max(bbox[:, 1])
+        y_max = np.max(bbox[:, 0])
+
+        center_x = (x_min + x_max) / 2
+        center_y = (y_min + y_max) / 2
+
+        size = max(x_max - x_min, y_max - y_min)
+
+        # apply padding
+        size = int(size * (1 + padding))
+
+        half = size // 2
+
+        img_w, img_h = output.size
+
+        left   = int(max(center_x - half, 0))
+        top    = int(max(center_y - half, 0))
+        right  = int(min(center_x + half, img_w))
+        bottom = int(min(center_y + half, img_h))
+
+        output = output.crop((left, top, right, bottom))  # type: ignore
+
+        # alpha composite
+        output = np.array(output).astype(np.float32) / 255.0
         output = output[:, :, :3] * output[:, :, 3:4]
         output = Image.fromarray((output * 255).astype(np.uint8))
 
-        #Resize output 
+        # Resize output
         output = output.resize(self.settings.output_image_size, Image.Resampling.LANCZOS)
         return output
+
 
     def _remove_background(self, image: Image.Image) -> Image.Image:
         """

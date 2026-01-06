@@ -118,23 +118,15 @@ class GenerationPipeline:
         )
 
         # Generate
-        response_3_views, response_1_views = await self.generate_gs(request)
+        response_3_views = await self.generate_gs(request)
 
         # Return binary PLY
-        if not response_3_views.ply_file_base64 or not response_1_views.ply_file_base64:
+        if not response_3_views.ply_file_base64:
             raise ValueError("PLY generation failed")
         #check time if > 25s then retun response_3_views
         print(f"Generation time: {response_3_views.generation_time}")
-        if response_3_views.generation_time > 25:
-            return response_3_views.ply_file_base64
-        else:
-            print("Generation time < 25s")
-            king = await compare(image_bytes, response_3_views.ply_file_base64, response_1_views.ply_file_base64)
-
-            if king == 1:
-                return response_3_views.ply_file_base64
-            else:
-                return response_1_views.ply_file_base64
+        
+        return response_3_views.ply_file_base64
 
 
     async def generate_gs(self, request: GenerateRequest) -> GenerateResponse:
@@ -186,18 +178,7 @@ class GenerationPipeline:
         )
         image_without_background_3 = self.rmbg.remove_background_new(image_edited_3)
 
-        image = image.convert("RGB")
-        original_image_without_background = self.rmbg.remove_background_new(image)
-        # # # save to debug
-        # image_edited.save("image_edited.png")
-        # # image_edited_2.save("image_edited_2.png")
-        # image_without_background.save("image_without_background.png")
-        # image_without_background_2.save("image_without_background_2.png")
-        # image_without_background_3.save("image_without_background_3.png")
-        # original_image_without_background.save("original_image_without_background.png")
-
         trellis_result_3_views: Optional[TrellisResult] = None
-        trellis_result_1_views: Optional[TrellisResult] = None
 
         # Resolve Trellis parameters from request
         trellis_params: TrellisParams = request.trellis_params
@@ -210,25 +191,14 @@ class GenerationPipeline:
                 seed=request.seed,
                 params=trellis_params,
             ),
-            threshold=25000,
+            threshold=50000,
             mode="multidiffusion",
-        )
-
-        trellis_result_1_views = self.trellis.generate(
-            TrellisRequest(
-                images=[image_without_background, original_image_without_background],
-                seed=request.seed,
-                params=trellis_params,
-            ),
-            threshold=36000,
-            mode="stochastic",
         )
 
         # Save generated files
         if self.settings.save_generated_files:
             save_files(
                 trellis_result_3_views, 
-                trellis_result_1_views,
                 image, 
                 image_edited, 
                 image_without_background,
@@ -263,17 +233,7 @@ class GenerationPipeline:
             else None,
         )
 
-        response_1_views = GenerateResponse(
-            generation_time=generation_time,
-            ply_file_base64=trellis_result_1_views.ply_file if trellis_result_1_views else None,
-            image_edited_file_base64=image_edited_base64
-            if self.settings.send_generated_files
-            else None,
-            image_without_background_file_base64=image_without_background_base64
-            if self.settings.send_generated_files
-            else None,
-        )
 
         print("success")
 
-        return response_3_views, response_1_views
+        return response_3_views
