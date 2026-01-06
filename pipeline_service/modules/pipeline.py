@@ -178,6 +178,8 @@ class GenerationPipeline:
         )
         image_without_background_3 = self.rmbg.remove_background_new(image_edited_3)
 
+        original_image_without_background = self.rmbg.remove_background_new(image)
+
         trellis_result_3_views: Optional[TrellisResult] = None
 
         # Resolve Trellis parameters from request
@@ -187,18 +189,19 @@ class GenerationPipeline:
         # 3. Generate the 3D model
         trellis_result_3_views = self.trellis.generate(
             TrellisRequest(
-                images=[image_without_background, image_without_background_2, image_without_background_3],
+                images=[original_image_without_background, image_without_background, image_without_background_2, image_without_background_3],
                 seed=request.seed,
                 params=trellis_params,
             ),
             threshold=50000,
-            mode="multidiffusion",
+            mode="stochastic",
         )
 
         # Save generated files
         if self.settings.save_generated_files:
             save_files(
                 trellis_result_3_views, 
+                original_image_without_background,
                 image, 
                 image_edited, 
                 image_without_background,
